@@ -1,0 +1,68 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, Segoe UI, Arial",
+    "primaryTextColor": "#ffffff",
+    "lineColor": "#ffffff",
+    "mainBkg": "#000000",
+    "clusterBkg": "#0f0f10",
+    "clusterBorder": "#ffffff"
+  },
+  "flowchart": {
+    "curve": "linear",
+    "nodeSpacing": 55,
+    "rankSpacing": 70,
+    "padding": 10
+  }
+}}%%
+
+flowchart LR
+
+subgraph TITLE["PROCESS FLOW: Breach Reporting"]
+direction LR
+S1["1) A web form enquiry is submitted on the website"]:::step
+S2["2) A confirmation email is sent; data is stored in the website database; contact details are sent via API to the CRM, where teams can view and ..."]:::step
+S1 --> S2
+end
+
+subgraph DS["DATA SUBJECTS"]
+direction LR
+A([ Defendants, claimants/enquirers (webform submitters), witnesses ]):::actor
+end
+
+subgraph SYS["SYSTEMS / ASSETS"]
+direction LR
+AS["Website/webform = AWS (owned by IT team); SQL database/admin = AWS (owned by IT team); CRM = AWS (owned by IT team); Email tool = AWS (owned by IT team); Admin console = AWS (owned by IT team); Other folders/drives = none"]:::sys
+end
+
+subgraph INT["ACCESS / INTERNAL SHARING"]
+direction LR
+ACC["Access: The process enables the secure intake, management, and storage of client matters and legal communications. Access to systems (website/admin console, database, CRM, email, and cloud infrastructure) is restricted by role and access level, ensuring that lawyers, support staff, and IT administrators can only access information necessary for their duties, in line with confidentiality and data protection requirements.\nControl: Yes. Access is restricted using role-based access and named user accounts (with MFA if used). Only Law Section staff can access case details; IT admins have limited admin access for support; other teams have no access."]:::meta
+IN["Internal: Shared internally with authorised lawyers and designated legal support staff only. IT access is limited to system administrators and support personnel for maintenance and security purposes. No other internal teams have access."]:::team
+end
+
+subgraph EXT["VENDORS / THIRD PARTIES"]
+direction LR
+V["External: Amazon Web Services (AWS) provides cloud hosting; Microsoft 365 provides email services. These vendors do not routinely access content; any access is limited to hosting or necessary support/maintenance under contract and confidentiality obligations."]:::vendor
+end
+
+subgraph XBD["TRANSBORDER"]
+direction LR
+TB["Outside UK/EEA: No. AWS and Microsoft 365 data storage and backups are in the UK/EEA only; any support access is from within the UK/EEA."]:::risk
+end
+
+A --> S1
+S2 -.-> AS
+S3 -.-> IN
+S3 -.-> V
+S3 -.-> TB
+
+classDef actor fill:#2e7d32,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef step  fill:#1b1b1c,stroke:#ffffff,stroke-width:2px,color:#ffffff;
+classDef sys   fill:#1565c0,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef team  fill:#6a1b9a,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef vendor fill:#ef6c00,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef risk  fill:#b71c1c,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef meta  fill:#263238,stroke:#ffffff,stroke-width:2px,color:#ffffff;
+
+linkStyle default stroke:#ffffff,stroke-width:2px;

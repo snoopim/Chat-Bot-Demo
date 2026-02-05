@@ -1,0 +1,70 @@
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, Segoe UI, Arial",
+    "primaryTextColor": "#ffffff",
+    "lineColor": "#ffffff",
+    "mainBkg": "#000000",
+    "clusterBkg": "#0f0f10",
+    "clusterBorder": "#ffffff"
+  },
+  "flowchart": {
+    "curve": "linear",
+    "nodeSpacing": 55,
+    "rankSpacing": 70,
+    "padding": 10
+  }
+}}%%
+
+flowchart LR
+
+subgraph TITLE["PROCESS FLOW: Newsletter"]
+direction LR
+S1["1) Data is collected"]:::step
+S2["2) Data is stored"]:::step
+S3["3) Data is used/shared"]:::step
+S1 --> S2
+S2 --> S3
+end
+
+subgraph DS["DATA SUBJECTS"]
+direction LR
+A([ Employees ]):::actor
+end
+
+subgraph SYS["SYSTEMS / ASSETS"]
+direction LR
+AS["Badgecontrol accessed via URL; logs stored in AWS [service like S3/CloudWatch] in [account/project]; owned by the software team."]:::sys
+end
+
+subgraph INT["ACCESS / INTERNAL SHARING"]
+direction LR
+ACC["Access: N/A\nControl: N/A"]:::meta
+IN["Internal: N/A"]:::team
+end
+
+subgraph EXT["VENDORS / THIRD PARTIES"]
+direction LR
+V["External: None"]:::vendor
+end
+
+subgraph XBD["TRANSBORDER"]
+direction LR
+TB["Outside UK/EEA: no"]:::risk
+end
+
+A --> S1
+S2 -.-> AS
+S3 -.-> IN
+S3 -.-> V
+S3 -.-> TB
+
+classDef actor fill:#2e7d32,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef step  fill:#1b1b1c,stroke:#ffffff,stroke-width:2px,color:#ffffff;
+classDef sys   fill:#1565c0,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef team  fill:#6a1b9a,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef vendor fill:#ef6c00,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef risk  fill:#b71c1c,stroke:#ffffff,stroke-width:2px,color:#ffffff,font-weight:bold;
+classDef meta  fill:#263238,stroke:#ffffff,stroke-width:2px,color:#ffffff;
+
+linkStyle default stroke:#ffffff,stroke-width:2px;
