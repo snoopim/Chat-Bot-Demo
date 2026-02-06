@@ -52,54 +52,72 @@ export function useRopaFlow() {
     return res.data;
   }, []);
 
-  const useCustomProcessName = useCallback(() => {
+  // ✅ define this FIRST so other callbacks can use it safely
+  const startRopaWithName = useCallback(
+    async (name: string) => {
+      const n = name.trim();
+      if (!n) return;
+
+      setLoadingStart(true);
+      setCurrentKey(null);
+
+      try {
+        const created = await api.post<ProcessFlow>("/process-flows/", {
+          name: n,
+          description: `Mode: ${mode}`,
+        });
+
+        setFlow(created.data);
+        setProcessName(n);
+
+        await Promise.all([loadAnswers(created.data.id), loadFlows()]);
+        const p = await refreshProgress(created.data.id);
+        setCurrentKey(p.next_recommended_key);
+
+        // clear input after successful create
+        setCustomName("");
+      } finally {
+        setLoadingStart(false);
+      }
+    },
+    [mode, loadAnswers, loadFlows, refreshProgress]
+  );
+
+  // ✅ now it's safe to call startRopaWithName here
+  const useCustomProcessName = useCallback(async () => {
     const name = customName.trim();
     if (!name) return;
-    setProcessName(name);
+
     resetLocalSession();
-    setCustomName("");
-  }, [customName, resetLocalSession]);
+    await startRopaWithName(name);
+  }, [customName, resetLocalSession, startRopaWithName]);
 
   const startRopa = useCallback(async () => {
     if (!processName) return;
+    await startRopaWithName(processName);
+  }, [processName, startRopaWithName]);
 
-    setLoadingStart(true);
-    setCurrentKey(null);
+  const resumeFlow = useCallback(
+    async (f: ProcessFlow) => {
+      setFlow(f);
+      setProcessName(f.name);
+      setCurrentKey(null);
 
-    try {
-      const created = await api.post<ProcessFlow>("/process-flows/", {
-        name: processName,
-        description: `Mode: ${mode}`,
-      });
-
-      setFlow(created.data);
-
-      await Promise.all([
-        loadAnswers(created.data.id),
-        loadFlows(),
-      ]);
-      const p = await refreshProgress(created.data.id);
+      await loadAnswers(f.id);
+      const p = await refreshProgress(f.id);
       setCurrentKey(p.next_recommended_key);
-    } finally {
-      setLoadingStart(false);
-    }
-  }, [processName, mode, loadAnswers, loadFlows, refreshProgress]);
+    },
+    [loadAnswers, refreshProgress]
+  );
 
-  const resumeFlow = useCallback(async (f: ProcessFlow) => {
-    setFlow(f);
-    setProcessName(f.name);
-    setCurrentKey(null);
-
-    await loadAnswers(f.id);
-    const p = await refreshProgress(f.id);
-    setCurrentKey(p.next_recommended_key);
-  }, [loadAnswers, refreshProgress]);
-
-  const goNextByBackend = useCallback(async (flowId: number) => {
-    await Promise.all([loadAnswers(flowId), loadFlows()]);
-    const p = await refreshProgress(flowId);
-    setCurrentKey(p.next_recommended_key);
-  }, [loadAnswers, loadFlows, refreshProgress]);
+  const goNextByBackend = useCallback(
+    async (flowId: number) => {
+      await Promise.all([loadAnswers(flowId), loadFlows()]);
+      const p = await refreshProgress(flowId);
+      setCurrentKey(p.next_recommended_key);
+    },
+    [loadAnswers, loadFlows, refreshProgress]
+  );
 
   const generateRopaExcel = useCallback(async (flowId: number) => {
     const res = await api.get(`/process-flows/${flowId}/export-ropa/`, {
@@ -125,10 +143,13 @@ export function useRopaFlow() {
     downloadBlob(blob, `ProcessFlow_${flowId}.docx`);
   }, []);
 
-  const selectProcessName = useCallback((name: string) => {
-    setProcessName(name);
-    resetLocalSession();
-  }, [resetLocalSession]);
+  const selectProcessName = useCallback(
+    (name: string) => {
+      setProcessName(name);
+      resetLocalSession();
+    },
+    [resetLocalSession]
+  );
 
   return {
     // State
