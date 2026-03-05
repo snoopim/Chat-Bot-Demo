@@ -52,7 +52,7 @@ export function useRopaFlow() {
     return res.data;
   }, []);
 
-  // ✅ define this FIRST so other callbacks can use it safely
+  // define this FIRST so other callbacks can use it safely
   const startRopaWithName = useCallback(
     async (name: string) => {
       const n = name.trim();
@@ -83,7 +83,7 @@ export function useRopaFlow() {
     [mode, loadAnswers, loadFlows, refreshProgress]
   );
 
-  // ✅ now it's safe to call startRopaWithName here
+  //  now it's safe to call startRopaWithName here
   const useCustomProcessName = useCallback(async () => {
     const name = customName.trim();
     if (!name) return;

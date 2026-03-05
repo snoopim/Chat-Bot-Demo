@@ -10,11 +10,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
-from pathlib import Path
+import os
 from dotenv import load_dotenv
-import dj_database_url
+from openai import OpenAI
 
-load_dotenv()
+load_dotenv()   # ⭐ THIS IS THE KEY LINE
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -59,7 +62,7 @@ MIDDLEWARE = [
     
 ]
 
-ROOT_URLCONF = 'backend.urls'
+ROOT_URLCONF = 'urls'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
@@ -84,7 +87,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'backend.wsgi.application'
+WSGI_APPLICATION = 'wsgi.application'
 
 
 # Database

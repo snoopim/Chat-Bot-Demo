@@ -1,0 +1,26 @@
+globalThis.__BUILD_MANIFEST = {
+  "pages": {
+    "/_app": []
+  },
+  "devFiles": [],
+  "polyfillFiles": [
+    "static/chunks/a2edd_next_dist_build_polyfills_polyfill-nomodule.js"
+  ],
+  "lowPriorityFiles": [],
+  "rootMainFiles": [
+    "static/chunks/[turbopack]_browser_dev_hmr-client_hmr-client_ts_8a768b6a._.js",
+    "static/chunks/a2edd_next_dist_compiled_react-dom_9e84dee2._.js",
+    "static/chunks/a2edd_next_dist_compiled_react-server-dom-turbopack_aefedb06._.js",
+    "static/chunks/a2edd_next_dist_compiled_next-devtools_index_135021f6.js",
+    "static/chunks/a2edd_next_dist_compiled_ba6a3978._.js",
+    "static/chunks/a2edd_next_dist_client_8c6c761a._.js",
+    "static/chunks/a2edd_next_dist_c426fd2a._.js",
+    "static/chunks/a2edd_@swc_helpers_cjs_19bf8add._.js",
+    "static/chunks/Desktop_Chat Bot 2nd version_drawio-ai-generator_a0ff3932._.js",
+    "static/chunks/turbopack-Desktop_Chat Bot 2nd version_drawio-ai-generator_b7ffd1de._.js"
+  ]
+};
+globalThis.__BUILD_MANIFEST.lowPriorityFiles = [
+"/static/" + process.env.__NEXT_BUILD_ID + "/_buildManifest.js",
+"/static/" + process.env.__NEXT_BUILD_ID + "/_ssgManifest.js"
+];
