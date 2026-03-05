@@ -5,3 +5,12 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Node
+node_modules/
+# Next
+.next/
+# Python
+__pycache__/
+*.pyc
+.venv/
