@@ -236,34 +236,6 @@ def render_mermaid_png(mermaid_text: str, out_dir: Path, name: str) -> MermaidRe
             text=True,
         )
 
-        if png_path.exists() and png_path.stat().st_size > 0:
-            return MermaidRenderResult(ok=True, png_path=png_path, mmd_path=mmd_path, cmd=cmd, error=None)
-
-        return MermaidRenderResult(ok=False, png_path=None, mmd_path=mmd_path, cmd=cmd, error="PNG missing/empty")
-
-    except subprocess.CalledProcessError as e:
-        return MermaidRenderResult(
-            ok=False,
-            png_path=None,
-            mmd_path=mmd_path,
-            cmd=cmd,
-            error=(
-                "mmdc failed.\n"
-                f"Return code: {e.returncode}\n\n"
-                "STDOUT:\n"
-                f"{(e.stdout or '').strip()}\n\n"
-                "STDERR:\n"
-                f"{(e.stderr or '').strip()}\n"
-            ),
-        )
-    except Exception as e:
-        return MermaidRenderResult(
-            ok=False,
-            png_path=None,
-            mmd_path=mmd_path,
-            cmd=cmd,
-            error=f"Unexpected error: {type(e).__name__}: {str(e)}",
-        )
 
 
 # -----------------------------
