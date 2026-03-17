@@ -751,26 +751,28 @@ def _pick_non_overlapping_bus_y(
 def build_drawio_from_plan(plan: dict) -> str:
     plan = _normalize_plan(plan)
 
-    title = _esc(plan.get("title"))
+    title = _esc(plan.get("title") or "Process Flow")
     lanes = plan.get("lanes") or []
     nodes = plan.get("nodes") or []
     edges = plan.get("edges") or []
 
-    # keep only used lanes
+    # ----------------------------------------------------------
+    # Keep only used lanes
+    # ----------------------------------------------------------
     used_lane_ids = {n.get("lane") for n in nodes if isinstance(n, dict) and n.get("lane")}
     lanes = [ln for ln in lanes if isinstance(ln, dict) and ln.get("id") in used_lane_ids]
 
     MAX_LANES = 3
     if len(lanes) > MAX_LANES:
         allowed_lane_ids = {ln["id"] for ln in lanes[:MAX_LANES]}
-        lanes = lanes[:MAX_LANES]
         fallback_lane = lanes[0]["id"]
+        lanes = lanes[:MAX_LANES]
         for n in nodes:
             if isinstance(n, dict) and n.get("lane") not in allowed_lane_ids:
                 n["lane"] = fallback_lane
 
     if not lanes:
-        lanes = [{"id": "lane_default", "name": "Lane", "color": "#f5f5f5"}]
+        lanes = [{"id": "lane_default", "name": "Lane", "color": "#E3F2FD"}]
         for n in nodes:
             if isinstance(n, dict):
                 n["lane"] = "lane_default"
@@ -789,102 +791,236 @@ def build_drawio_from_plan(plan: dict) -> str:
         if isinstance(n, dict) and n.get("lane") not in set(lane_ids):
             n["lane"] = default_lane
 
-    # enforce lane boundary rule
+    # enforce one-lane-boundary rule
     edges = _enforce_max_one_lane_boundary(lanes=lanes, nodes=nodes, edges=edges)
 
-    # =========================
-    # Layout constants
-    # =========================
-    START_X = 40
-    START_Y = 40
-    LANE_GAP = 50
-
-    NODE_H = 56
-    LANE_HEADER_H = 26
-
-    LANE_PAD_X = 110
-    MIN_PAD_Y = 14
-    ROW_GAP = 26  # enables multiple rows per lane
-
-    # routing
-    PORT_MARGIN = 14.0
-    BUS_Y_CLEARANCE = 14.0
-    DOGLEG_OUT = 18.0
-    LEAD = 18.0
-
-    # separate exits/entries from same node
-    PORT_OFFSET_STEP_PX = 12.0
-    PORT_OFFSET_TRIES = 8
-
-    # -----------------------------------------
-    # Node sizing
-    # -----------------------------------------
-    lane_counts: Dict[str, int] = defaultdict(int)
-    lane_label_lens: Dict[str, int] = defaultdict(int)
-    for n in nodes:
-        if not isinstance(n, dict):
-            continue
-        lid = n.get("lane") or default_lane
-        lane_counts[lid] += 1
-        lane_label_lens[lid] = max(lane_label_lens[lid], len((n.get("label") or "").strip()))
-
-    NODE_W_BY_LANE: Dict[str, int] = {}
-    for lid in lane_ids:
-        max_len = lane_label_lens.get(lid, 10)
-        NODE_W_BY_LANE[lid] = max(140, min(220, max_len * 7 + 34))
-
-    max_nodes_any_lane = max([lane_counts.get(lid, 0) for lid in lane_ids] or [1])
-    COLS = max(1, min(8, max_nodes_any_lane))
-
-    max_node_w = max(NODE_W_BY_LANE.values() or [180])
-    min_col_gap = 70
-    LANE_WIDTH = int(max(900, min(1300, (LANE_PAD_X * 2) + (COLS - 1) * (max_node_w + min_col_gap) + max_node_w)))
-
-    SAFE_X_MIN = float(START_X + 20)
-    SAFE_X_MAX = float(START_X + LANE_WIDTH - 20)
-
-    # =========================
-    # Nodes map
-    # =========================
+    # ----------------------------------------------------------
+    # Node map
+    # ----------------------------------------------------------
     node_by_id: Dict[str, Dict[str, Any]] = {}
     for n in nodes:
         if isinstance(n, dict) and n.get("id"):
             node_by_id[n["id"]] = n
 
+    # ----------------------------------------------------------
+    # Shape inference
+    # ----------------------------------------------------------
+    def _node_shape(nid: str, n: Dict[str, Any]) -> str:
+        label = (n.get("label") or "").strip().lower()
+
+        lane_name = ""
+        for ln in lanes:
+            if ln.get("id") == n.get("lane"):
+                lane_name = (ln.get("name") or "").strip().lower()
+                break
+
+        actor_words = {
+            "supplier", "customer", "user", "employee", "bank", "vendor",
+            "partner", "client", "manager", "admin", "staff", "finance team",
+            "data subject", "processor", "controller", "external"
+        }
+
+        if any(w == label or w in label for w in actor_words):
+            return "actor"
+
+        if lane_name in {"external", "people", "person", "roles", "partners", "partner"}:
+            return "actor"
+
+        return "rounded"
+
+    # ----------------------------------------------------------
+    # Style helpers
+    # ----------------------------------------------------------
+    def _darken_hex(color: str, factor: float = 0.82) -> str:
+        if not _is_hex_color(color):
+            return "#a0a0a0"
+        c = color.lstrip("#")
+        r = max(0, min(255, int(int(c[0:2], 16) * factor)))
+        g = max(0, min(255, int(int(c[2:4], 16) * factor)))
+        b = max(0, min(255, int(int(c[4:6], 16) * factor)))
+        return f"#{r:02x}{g:02x}{b:02x}"
+
+    def _lane_style(fill: str) -> str:
+        stroke = _darken_hex(fill, 0.82)
+        return (
+            "swimlane;"
+            "rounded=0;"
+            "whiteSpace=wrap;"
+            "html=1;"
+            f"startSize={LANE_HEADER_H};"
+            "horizontal=0;"
+            "align=left;"
+            "verticalAlign=top;"
+            "fontStyle=1;"
+            "fontSize=12;"
+            f"fillColor={fill};"
+            f"strokeColor={stroke};"
+            "fontColor=#333333;"
+            "collapsible=0;"
+        )
+
+    def _node_style(fill: str, shape_kind: str) -> str:
+        stroke = _darken_hex(fill, 0.78)
+        return (
+            "rounded=1;"
+            "whiteSpace=wrap;"
+            "html=1;"
+            "fontColor=#000000;"
+            "align=center;"
+            "verticalAlign=middle;"
+            "fontStyle=1;"
+            "fontSize=11;"
+            f"fillColor={fill};"
+            f"strokeColor={stroke};"
+            + ("strokeWidth=2;" if shape_kind == "actor" else "strokeWidth=1.5;")
+        )
+
+    # ----------------------------------------------------------
+    # Label helpers
+    # ----------------------------------------------------------
+    def _nounify_edge_label(label: str, data_label: str) -> str:
+        dl = (data_label or "").strip()
+        lb = (label or "").strip()
+
+        if dl and len(dl) > 2:
+            return dl
+
+        low = lb.lower()
+        verb_to_noun = {
+            "submit": "Submission",
+            "store": "Storage",
+            "send": "Transfer",
+            "sync": "Synchronization",
+            "publish": "Publication",
+            "track": "Tracking",
+            "create": "Creation",
+            "view": "Access",
+            "update": "Update",
+            "record": "Record",
+            "run": "Execution",
+            "export": "Export",
+            "import": "Import",
+            "migrate": "Migration",
+            "reconcile": "Reconciliation",
+            "approve": "Approval",
+            "review": "Review",
+            "validate": "Validation",
+            "check": "Check",
+        }
+
+        if low in verb_to_noun:
+            return verb_to_noun[low]
+
+        if not lb:
+            return ""
+
+        return lb[:1].upper() + lb[1:]
+
+    # ----------------------------------------------------------
+    # Layout constants
+    # ----------------------------------------------------------
+    START_X = 40
+    START_Y = 40
+    TITLE_H = 55
+    LANE_GAP = 30
+    LANE_HEADER_H = 26
+
+    NODE_H = 56
+    PAD_X = 90
+    PAD_Y = 18
+    ROW_GAP = 34
+
+    PORT_MARGIN = 14.0
+    PORT_OFFSET_STEP_PX = 12.0
+    PORT_OFFSET_TRIES = 8
+
+    LANE_WIDTH = 1100.0
+    SAFE_X_MIN = START_X + 20.0
+    SAFE_X_MAX = START_X + LANE_WIDTH - 20.0
+
+    # ----------------------------------------------------------
+    # Node sizing
+    # ----------------------------------------------------------
+    lane_nodes: DefaultDict[str, List[str]] = defaultdict(list)
+    lane_label_lens: DefaultDict[str, int] = defaultdict(int)
+
+    for nid, n in node_by_id.items():
+        lid = n.get("lane") or default_lane
+        lane_nodes[lid].append(nid)
+        lane_label_lens[lid] = max(lane_label_lens[lid], len((n.get("label") or "").strip()))
+
+    NODE_W_BY_LANE: Dict[str, float] = {}
+    for lid in lane_ids:
+        max_len = lane_label_lens.get(lid, 10)
+        NODE_W_BY_LANE[lid] = max(130.0, min(230.0, float(max_len * 7 + 36)))
+
+    # ----------------------------------------------------------
     # Column assignment
+    # ----------------------------------------------------------
     col_of = _assign_columns_min_edge_span(
         nodes=[{"id": n["id"], "lane": n.get("lane"), "label": n.get("label")} for n in node_by_id.values()],
         edges=edges,
         lane_ids=lane_ids,
     )
 
-    # row assignment per lane+col
     def _node_sort_key(nid: str) -> Tuple[str, str]:
         lbl = (node_by_id[nid].get("label") or "").strip().lower()
         return (lbl, nid)
 
-    lane_col_buckets: DefaultDict[Tuple[str, int], List[str]] = defaultdict(list)
-    for nid in node_by_id.keys():
-        ln = (node_by_id[nid].get("lane") or default_lane)
-        c = int(col_of.get(nid, 0))
-        lane_col_buckets[(ln, c)].append(nid)
+    # ----------------------------------------------------------
+    # Better lane-wise placement
+    # ----------------------------------------------------------
+    lane_ordered_nodes: Dict[str, List[str]] = {}
+    lane_cols_override: Dict[str, Dict[str, int]] = {}
+
+    for lid in lane_ids:
+        nids = lane_nodes.get(lid, [])[:]
+        nids.sort(key=_node_sort_key)
+        lane_ordered_nodes[lid] = nids
+
+        unique_cols = sorted({int(col_of.get(nid, 0)) for nid in nids})
+
+        if len(unique_cols) <= 1 and len(nids) >= 2:
+            lane_cols_override[lid] = {}
+            for i, nid in enumerate(nids):
+                lane_cols_override[lid][nid] = i
+        else:
+            lane_cols_override[lid] = {nid: int(col_of.get(nid, 0)) for nid in nids}
 
     row_of: Dict[str, int] = {}
     max_rows_by_lane: DefaultDict[str, int] = defaultdict(int)
-    for (ln, c), nids in lane_col_buckets.items():
-        nids.sort(key=_node_sort_key)
-        for r_idx, nid in enumerate(nids):
-            row_of[nid] = r_idx
-            max_rows_by_lane[ln] = max(max_rows_by_lane[ln], r_idx + 1)
 
-    def _lane_height(lid: str) -> int:
+    for lid in lane_ids:
+        nids = lane_ordered_nodes.get(lid, [])
+        if not nids:
+            continue
+
+        cols_for_lane = lane_cols_override[lid]
+        unique_cols = sorted(set(cols_for_lane.values()))
+
+        if len(unique_cols) == len(nids):
+            for nid in nids:
+                row_of[nid] = 0
+            max_rows_by_lane[lid] = 1
+        else:
+            buckets: DefaultDict[int, List[str]] = defaultdict(list)
+            for nid in nids:
+                buckets[cols_for_lane[nid]].append(nid)
+
+            for c, cnids in buckets.items():
+                cnids.sort(key=_node_sort_key)
+                for r_idx, nid in enumerate(cnids):
+                    row_of[nid] = r_idx
+                    max_rows_by_lane[lid] = max(max_rows_by_lane[lid], r_idx + 1)
+
+    def _lane_height(lid: str) -> float:
         rows = max(1, int(max_rows_by_lane.get(lid, 1)))
         content_h = rows * NODE_H + (rows - 1) * ROW_GAP
-        return max(140, int(LANE_HEADER_H + MIN_PAD_Y * 2 + content_h + 18))
+        return float(max(150, int(LANE_HEADER_H + PAD_Y * 2 + content_h + 24)))
 
-    # =========================
+    # ----------------------------------------------------------
     # Build cells
-    # =========================
+    # ----------------------------------------------------------
     cells: List[str] = []
     cid = 2
 
@@ -894,125 +1030,153 @@ def build_drawio_from_plan(plan: dict) -> str:
         cid += 1
         return x
 
-    # Title band
+    lane_cell_id_by_lane: Dict[str, int] = {}
+    lane_top_y: Dict[str, float] = {}
+    lane_bottom_y: Dict[str, float] = {}
+
+    # title
     title_id = next_id()
     cells.append(
         f'<mxCell id="{title_id}" value="{title}" '
         f'style="rounded=1;whiteSpace=wrap;html=1;align=center;verticalAlign=middle;'
         f'fontStyle=1;fontSize=16;strokeWidth=2;fillColor=#1a1a2e;strokeColor=#16213e;fontColor=#ffffff;" '
         f'vertex="1" parent="1">'
-        f'<mxGeometry x="{START_X}" y="{START_Y}" width="{LANE_WIDTH}" height="55" as="geometry"/>'
+        f'<mxGeometry x="{START_X}" y="{START_Y}" width="{LANE_WIDTH:.1f}" height="{TITLE_H}" as="geometry"/>'
         f"</mxCell>"
     )
 
-    # Lanes
-    lane_y = START_Y + 75
-    lane_cell_id_by_lane: Dict[str, int] = {}
-    lane_top_y: Dict[str, float] = {}
-    lane_bottom_y: Dict[str, float] = {}
-
+    # lanes
+    lane_y = START_Y + TITLE_H + 20
     for ln in lanes:
         lane_id = (ln.get("id") or "").strip() or "lane_default"
         lane_name = _esc(ln.get("name") or lane_id or "Lane")
         lane_color = (ln.get("color") or "#f5f5f5").strip()
+        lane_h = _lane_height(lane_id)
 
         lid_cell = next_id()
         lane_cell_id_by_lane[lane_id] = lid_cell
         lane_top_y[lane_id] = float(lane_y)
-
-        lh = _lane_height(lane_id)
-        lane_bottom_y[lane_id] = float(lane_y + lh)
+        lane_bottom_y[lane_id] = float(lane_y + lane_h)
 
         cells.append(
             f'<mxCell id="{lid_cell}" value="{lane_name}" '
-            f'style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize={LANE_HEADER_H};'
-            f'horizontal=0;align=left;verticalAlign=top;fontStyle=1;fontSize=12;'
-            f'fillColor={lane_color};strokeColor=#d0d0d0;" vertex="1" parent="1">'
-            f'<mxGeometry x="{START_X}" y="{lane_y}" width="{LANE_WIDTH}" height="{lh}" as="geometry"/>'
+            f'style="{_lane_style(lane_color)}" vertex="1" parent="1">'
+            f'<mxGeometry x="{START_X:.1f}" y="{lane_y:.1f}" width="{LANE_WIDTH:.1f}" height="{lane_h:.1f}" as="geometry"/>'
             f"</mxCell>"
         )
-        lane_y += lh + LANE_GAP
+        lane_y += lane_h + LANE_GAP
 
-    # Column centers
-    left = START_X + LANE_PAD_X
-    right = START_X + LANE_WIDTH - LANE_PAD_X
-    if COLS == 1:
-        col_centers = [(left + right) / 2.0]
-    else:
-        step = (right - left) / float(COLS - 1)
-        col_centers = [left + i * step for i in range(COLS)]
-
+    # ----------------------------------------------------------
     # Node geometries
+    # ----------------------------------------------------------
     node_cell_id_by_node: Dict[str, int] = {}
     node_geom: Dict[str, Dict[str, float]] = {}
     node_layout: List[Dict[str, Any]] = []
 
-    for nid, n in node_by_id.items():
-        lane_id = n.get("lane") or default_lane
-        if lane_id not in lane_cell_id_by_lane:
-            lane_id = lane_ids[0] if lane_ids else default_lane
+    for lid in lane_ids:
+        nids = lane_ordered_nodes.get(lid, [])
+        if not nids:
+            continue
 
-        mx_node_id = next_id()
-        node_cell_id_by_node[nid] = mx_node_id
+        node_w = float(NODE_W_BY_LANE.get(lid, 170.0))
+        cols_for_lane = lane_cols_override[lid]
+        unique_cols = sorted(set(cols_for_lane.values()))
 
-        w = float(NODE_W_BY_LANE.get(lane_id, 170))
-        label = _esc(_short(n.get("label") or nid or "Step"))
+        left = START_X + PAD_X + node_w / 2.0
+        right = START_X + LANE_WIDTH - PAD_X - node_w / 2.0
 
-        cidx = int(_clamp(float(col_of.get(nid, 0)), 0.0, float(len(col_centers) - 1)))
-        cx = float(col_centers[cidx])
+        if len(unique_cols) == 1:
+            col_centers = {unique_cols[0]: (left + right) / 2.0}
+        else:
+            step = (right - left) / float(len(unique_cols) - 1)
+            col_centers = {c: left + i * step for i, c in enumerate(unique_cols)}
 
-        x = _clamp(cx - w / 2.0, START_X + 15, START_X + LANE_WIDTH - 15 - w)
+        for nid in nids:
+            n = node_by_id[nid]
+            mx_node_id = next_id()
+            node_cell_id_by_node[nid] = mx_node_id
 
-        r_idx = int(row_of.get(nid, 0))
-        y0 = lane_top_y[lane_id] + LANE_HEADER_H + MIN_PAD_Y
-        y = y0 + r_idx * (NODE_H + ROW_GAP)
+            cidx = cols_for_lane[nid]
+            r_idx = int(row_of.get(nid, 0))
 
-        fill = (next((ln.get("color") for ln in lanes if ln.get("id") == lane_id), "#ffffff") or "#ffffff").strip()
-        if not _is_hex_color(fill):
-            fill = "#ffffff"
+            cx = col_centers.get(cidx, (left + right) / 2.0)
+            abs_x = float(cx - node_w / 2.0)
+            abs_y = float(lane_top_y[lid] + LANE_HEADER_H + PAD_Y + r_idx * (NODE_H + ROW_GAP))
 
-        geom = {"x": float(x), "y": float(y), "w": float(w), "h": float(NODE_H), "lane_id": lane_id}
-        node_geom[nid] = geom
+            fill = (next((ln.get("color") for ln in lanes if ln.get("id") == lid), "#ffffff") or "#ffffff").strip()
+            if not _is_hex_color(fill):
+                fill = "#ffffff"
 
-        node_layout.append({"mx_id": mx_node_id, "label": label, "lane_id": lane_id, "x": x, "y": y, "w": w, "fill": fill})
+            shape_kind = _node_shape(nid, n)
+            label = _esc(_short(n.get("label") or nid or "Step", 40))
 
-    # ==========================================================
-    # IMPORTANT: make node collision boxes BIGGER so edges don't run under unrelated nodes
-    # ==========================================================
-    # UPDATED: larger safety area to stop edges passing under unrelated nodes
-    NODE_PAD_FOR_EDGES = 46.0
-    node_rects_inflated = [_inflate_rect(g, NODE_PAD_FOR_EDGES) for g in node_geom.values()]
+            geom = {"x": abs_x, "y": abs_y, "w": float(node_w), "h": float(NODE_H), "lane_id": lid, "lane_color": fill}
+            node_geom[nid] = geom
 
-    # ==========================================================
-    # Edge helpers: lead-out & approach
-    # ==========================================================
-    def _lead_point(p: Point, side: str, lead: float) -> Point:
-        x, y = p
-        if side == "east":
-            return (x + lead, y)
-        if side == "west":
-            return (x - lead, y)
-        if side == "north":
-            return (x, y - lead)
-        if side == "south":
-            return (x, y + lead)
-        return (x + lead, y)
+            rel_x = abs_x - START_X
+            rel_y = abs_y - lane_top_y[lid]
 
-    def _approach_point(p: Point, side: str, lead: float) -> Point:
-        x, y = p
-        if side == "east":
-            return (x + lead, y)
-        if side == "west":
-            return (x - lead, y)
-        if side == "north":
-            return (x, y - lead)
-        if side == "south":
-            return (x, y + lead)
-        return (x - lead, y)
+            node_layout.append(
+                {
+                    "mx_id": mx_node_id,
+                    "label": label,
+                    "lane_id": lid,
+                    "x": rel_x,
+                    "y": rel_y,
+                    "abs_x": abs_x,
+                    "abs_y": abs_y,
+                    "w": float(node_w),
+                    "h": float(NODE_H),
+                    "fill": fill,
+                    "shape": shape_kind,
+                    "parent": lane_cell_id_by_lane[lid],
+                }
+            )
 
-    # ==========================================================
-    # Same-lane bus_y candidates that do NOT cut through nodes
-    # ==========================================================
+    # ----------------------------------------------------------
+    # Edge routing
+    # ----------------------------------------------------------
+    node_rects_inflated = [_inflate_rect(g, 34.0) for g in node_geom.values()]
+
+    edge_style_base = (
+        "edgeStyle=orthogonalEdgeStyle;"
+        "rounded=1;"
+        "orthogonalLoop=1;"
+        "jettySize=auto;"
+        "html=1;"
+        "strokeColor=#000000;"
+        "strokeWidth=2;"
+        "startArrow=none;"
+        "endArrow=classic;"
+        "endFill=1;"
+        "endSize=10;"
+        "exitPerimeter=1;"
+        "entryPerimeter=1;"
+        "labelBackgroundColor=#ffffff;"
+        "labelBorderColor=none;"
+        "fontSize=9;"
+        "align=center;"
+        "verticalAlign=middle;"
+        "spacing=2;"
+    )
+
+    occupied_bus_hsegs: List[Seg] = []
+    edge_records: List[Dict[str, Any]] = []
+
+    # side fanout counters to reduce corridor overlap
+    right_side_fanout_counter: DefaultDict[str, int] = defaultdict(int)
+    left_side_fanout_counter: DefaultDict[str, int] = defaultdict(int)
+
+    # same-lane bus staggering to stop parallel edges using same y
+    same_lane_bus_counter: DefaultDict[Tuple[str, str, str], int] = defaultdict(int)
+
+    # separate vertical drops near same target area
+    vertical_target_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
+
+    # NEW: separate repeated exits/entries on the same node side
+    out_port_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
+    in_port_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
+
     def _same_lane_bus_y_candidates(lane_id: str, base_y: float, step: float, tries: int) -> List[float]:
         offs = _generate_offsets(step, tries)
         return [base_y + o for o in offs]
@@ -1022,198 +1186,6 @@ def build_drawio_from_plan(plan: dict) -> str:
             if _seg_hits_rect_h(x1, x2, y, r):
                 return False
         return True
-
-    # ==========================================================
-    # Edges
-    # ==========================================================
-    edge_style_base = (
-        "edgeStyle=orthogonalEdgeStyle;"
-        "orthogonalLoop=1;"
-        "jettySize=auto;"
-        "rounded=1;"
-        "arcSize=12;"
-        "html=1;"
-        "strokeColor=#000000;"
-        "strokeWidth=2;"
-        "startArrow=none;"
-        "endArrow=classic;"
-        "endFill=1;"
-        "endSize=10;"
-        "exitPerimeter=1;entryPerimeter=1;"
-        "labelBackgroundColor=#ffffff;"
-        "labelBorderColor=none;"
-        "fontSize=9;"
-        "align=center;"
-        "verticalAlign=middle;"
-        "spacing=2;"
-    )
-
-    # =========================
-    # Label placement:
-    #  - keep label CLOSE to its edge by default
-    #  - ONLY push farther when crowded
-    # =========================
-    label_rects: List[Dict[str, float]] = []
-    label_centers: List[Tuple[float, float]] = []
-
-    # UPDATED: smaller min distance => labels stay closer and don't "fly away"
-    MIN_LABEL_CENTER_DIST = 65.0
-
-    def _label_ok(cand: Dict[str, float]) -> bool:
-        if any(_rects_overlap(cand, r) for r in node_rects_inflated):
-            return False
-        if any(_rects_overlap(cand, r) for r in label_rects):
-            return False
-        cc = _rect_center(cand)
-        for c in label_centers:
-            if _dist(cc, c) < MIN_LABEL_CENTER_DIST:
-                return False
-        return True
-
-    def _commit_label_rect(cand: Dict[str, float]) -> None:
-        label_rects.append(cand)
-        label_centers.append(_rect_center(cand))
-
-    def _label_wh(text: str) -> Tuple[float, float]:
-        w = float(max(72, min(200, len(text) * 7 + 28)))
-        h = 22.0
-        return w, h
-
-    def _rect_from_center(cx: float, cy: float, w: float, h: float) -> Dict[str, float]:
-        return {"x": cx - w / 2, "y": cy - h / 2, "w": w, "h": h}
-
-    def _place_label_on_edge_return_offset(
-        text: str,
-        route_pts: List[Point],
-        global_i: int,
-        extra_push: float,
-    ) -> Tuple[float, float, float, float]:
-        """
-        Place label close to the source node (start of edge),
-        instead of the middle. This makes it clear which edge the
-        label belongs to.
-        """
-        w, h = _label_wh(text)
-
-        if not route_pts:
-            cand = _rect_from_center(0.0, 0.0, w, h)
-            _commit_label_rect(cand)
-            return (w, h, 0.0, 0.0)
-
-        # 🔹 Position near start of edge
-        frac = 0.18
-
-        ax, ay, normal = _point_at_fraction(route_pts, frac)
-        nx, ny = normal
-
-        # small offsets so label sits next to edge
-        offsets = [0, 10, -10, 16, -16, 22, -22]
-
-        for off in offsets:
-            cx = ax + nx * off
-            cy = ay + ny * off
-            cand = _rect_from_center(cx, cy, w, h)
-
-            if _label_ok(cand):
-                _commit_label_rect(cand)
-                return (w, h, cx - ax, cy - ay)
-
-        # fallback
-        cand = _rect_from_center(ax, ay, w, h)
-        _commit_label_rect(cand)
-        return (w, h, 0.0, 0.0)
-        # use extra_push, but keep it gentle
-        def _apply_extra(offsets: List[float]) -> List[float]:
-            if extra_push == 0:
-                return offsets
-            out = []
-            for o in offsets:
-                if o == 0:
-                    out.append(0.0)
-                else:
-                    out.append(float(o + (extra_push * (1 if o > 0 else -1)) * 0.35))
-            return out
-
-        close_offsets = _apply_extra(close_offsets)
-        far_offsets = _apply_extra(far_offsets)
-
-        best_score = -1e18
-        best_cand: Optional[Dict[str, float]] = None
-        best_off: Tuple[float, float] = (0.0, 0.0)
-
-        def _try_offsets(offset_list: List[float]) -> Optional[Tuple[float, float, Dict[str, float]]]:
-            nonlocal best_score, best_cand, best_off
-            for t in frac_candidates:
-                ax, ay, normal = _point_at_fraction(route_pts, t)
-                nx, ny = normal
-
-                for flip in (1.0, -1.0):
-                    fx, fy = nx * flip, ny * flip
-
-                    for off in offset_list:
-                        cx = ax + fx * off
-                        cy = ay + fy * off
-                        cand = _rect_from_center(cx, cy, w, h)
-
-                        cc = _rect_center(cand)
-                        dmin = min((_dist(cc, c) for c in label_centers), default=1e9)
-
-                        ok = _label_ok(cand)
-
-                        penalty = 0.0
-                        if any(_rects_overlap(cand, r) for r in node_rects_inflated):
-                            penalty += 9999.0
-                        if any(_rects_overlap(cand, r) for r in label_rects):
-                            penalty += 5000.0
-                        if not ok:
-                            penalty += 2000.0
-
-                        score = dmin - penalty - abs(off) * 0.45  # stronger preference for closeness
-
-                        if score > best_score:
-                            best_score = score
-                            best_cand = cand
-                            best_off = (cx - ax, cy - ay)
-
-                        if ok:
-                            _commit_label_rect(cand)
-                            return (cx - ax, cy - ay, cand)
-            return None
-
-        # First pass: keep label close
-        hit = _try_offsets(close_offsets)
-        if hit is not None:
-            offx, offy, _ = hit
-            return (w, h, offx, offy)
-
-        # Second pass: allow farther only when crowded
-        hit = _try_offsets(far_offsets)
-        if hit is not None:
-            offx, offy, _ = hit
-            return (w, h, offx, offy)
-
-        # fallback (still attach on-edge)
-        ax, ay, _ = _point_at_fraction(route_pts, 0.5)
-        cand = _rect_from_center(ax, ay, w, h)
-        _commit_label_rect(cand)
-        return (w, h, 0.0, 0.0)
-
-    # Bus separation counters
-    bus_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
-
-    # per-node-side port usage counters (outgoing + incoming)
-    out_port_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
-    in_port_counter: DefaultDict[Tuple[str, str], int] = defaultdict(int)
-
-    # per-source label push
-    out_edge_index: DefaultDict[str, int] = defaultdict(int)
-
-    # reserve bus segments so later edges cannot choose identical bus lines
-    occupied_bus_hsegs: List[Seg] = []
-
-    edge_index_global = 0
-    edge_records: List[Dict[str, Any]] = []
-    pending_edge_child_labels: List[str] = []
 
     for e in edges:
         if not isinstance(e, dict):
@@ -1234,11 +1206,13 @@ def build_drawio_from_plan(plan: dict) -> str:
         if not src_g or not tgt_g:
             continue
 
+        # ------------------------------------------------------
+        # Anchor side + per-node-side port offset
+        # ------------------------------------------------------
         base_ex_x, base_ex_y, base_en_x, base_en_y = _anchors_from_geom(src_g, tgt_g)
         src_side = _port_side(base_ex_x, base_ex_y)
         tgt_side = _port_side(base_en_x, base_en_y)
 
-        # allocate a unique offset for this node+side
         out_k = out_port_counter[(src_plan, src_side)]
         out_port_counter[(src_plan, src_side)] += 1
 
@@ -1251,104 +1225,176 @@ def build_drawio_from_plan(plan: dict) -> str:
         ex_x, ex_y = _apply_port_offset(src_g, src_side, base_ex_x, base_ex_y, out_off_px)
         en_x, en_y = _apply_port_offset(tgt_g, tgt_side, base_en_x, base_en_y, in_off_px)
 
-        port_constraints = f"sourcePortConstraint={src_side};targetPortConstraint={tgt_side};"
+        # fanout offsets for crowded left/right side corridors
+        src_fan_px = 0.0
+        tgt_fan_px = 0.0
+
+        if src_side == "east":
+            src_fan_px = 18.0 * right_side_fanout_counter[src_plan]
+            right_side_fanout_counter[src_plan] += 1
+        elif src_side == "west":
+            src_fan_px = 18.0 * left_side_fanout_counter[src_plan]
+            left_side_fanout_counter[src_plan] += 1
+
+        if tgt_side == "east":
+            tgt_fan_px = 18.0 * right_side_fanout_counter[tgt_plan]
+            right_side_fanout_counter[tgt_plan] += 1
+        elif tgt_side == "west":
+            tgt_fan_px = 18.0 * left_side_fanout_counter[tgt_plan]
+            left_side_fanout_counter[tgt_plan] += 1
+
         anchor_style = (
             f"exitX={ex_x:.2f};exitY={ex_y:.2f};exitDx=0;exitDy=0;"
             f"entryX={en_x:.2f};entryY={en_y:.2f};entryDx=0;entryDy=0;"
         )
+        port_constraints = f"sourcePortConstraint={src_side};targetPortConstraint={tgt_side};"
 
         start = _push_out_from_box(src_g, ex_x, ex_y, PORT_MARGIN)
         end = _push_out_from_box(tgt_g, en_x, en_y, PORT_MARGIN)
 
+        # apply fanout to start/end
+        if src_side == "east":
+            start = (start[0] + src_fan_px, start[1])
+        elif src_side == "west":
+            start = (start[0] - src_fan_px, start[1])
+
+        if tgt_side == "east":
+            end = (end[0] + tgt_fan_px, end[1])
+        elif tgt_side == "west":
+            end = (end[0] - tgt_fan_px, end[1])
+
+        sx, sy = start
+        tx, ty = end
+
         src_lane = str(src_g.get("lane_id") or default_lane)
         tgt_lane = str(tgt_g.get("lane_id") or default_lane)
 
-        start2 = _lead_point(start, src_side, LEAD)
-        end_pre = _approach_point(end, tgt_side, LEAD)
+        if src_lane == tgt_lane:
+            top = lane_top_y[src_lane]
+            bot = lane_bottom_y[src_lane]
 
-        route_pts: List[Point] = [start, start2]
-
-        # Decide bus_y
-        sx, _ = start2
-        ex, _ = end_pre
-
-        if src_lane != tgt_lane and src_lane in lane_top_y and tgt_lane in lane_top_y:
-            sy_top = lane_top_y[src_lane]
-            sy_bot = lane_bottom_y[src_lane]
-            ty_top = lane_top_y[tgt_lane]
-            ty_bot = lane_bottom_y[tgt_lane]
-
-            if ty_top > sy_top:
-                base_bus_y = sy_bot + (LANE_GAP / 2.0) - BUS_Y_CLEARANCE
-                gap_top = sy_bot + 6
-                gap_bot = sy_bot + LANE_GAP - 6
-            else:
-                base_bus_y = ty_bot + (LANE_GAP / 2.0) + BUS_Y_CLEARANCE
-                gap_top = ty_bot + 6
-                gap_bot = ty_bot + LANE_GAP - 6
-
-            k = bus_counter[(src_lane, tgt_lane)]
-            bus_counter[(src_lane, tgt_lane)] += 1
-            base_bus_y = _clamp(base_bus_y + (k % 7) * 10.0, gap_top, gap_bot)
-
-            bus_y = _pick_non_overlapping_bus_y(
-                base_y=base_bus_y,
-                sx=sx,
-                ex=ex,
-                safe_top=gap_top,
-                safe_bot=gap_bot,
-                node_rects_inflated=node_rects_inflated,
-                occupied_bus_hsegs=occupied_bus_hsegs,
-                step=10.0,
-                tries=18,
-                tol=6.0,
-            )
-        else:
-            top = lane_top_y.get(src_lane, src_g["y"])
-            bot = lane_bottom_y.get(src_lane, src_g["y"] + src_g["h"] + 100)
             safe_top = top + LANE_HEADER_H + 6
             safe_bot = bot - 6
 
-            # UPDATED: route even closer to header to avoid node area
-            base_bus_y = top + LANE_HEADER_H + 2
+            lane_dir = f"{src_side}->{tgt_side}"
+            same_lane_key = (src_lane, tgt_plan, lane_dir)
+            same_lane_idx = same_lane_bus_counter[same_lane_key]
+            same_lane_bus_counter[same_lane_key] += 1
 
-            bus_y = _pick_non_overlapping_bus_y(
-                base_y=base_bus_y,
-                sx=sx,
-                ex=ex,
-                safe_top=safe_top,
-                safe_bot=safe_bot,
-                node_rects_inflated=node_rects_inflated,
-                occupied_bus_hsegs=occupied_bus_hsegs,
-                step=10.0,
-                tries=26,
-                tol=6.0,
-            )
+            # forbidden middle band: first row of nodes
+            node_row_top = top + LANE_HEADER_H + PAD_Y - 8
+            node_row_bot = top + LANE_HEADER_H + PAD_Y + NODE_H + 12
 
-            # if still hits nodes, scan more candidates (including lower bands)
-            if not _bus_y_ok(bus_y, sx, ex):
-                cand_list = _same_lane_bus_y_candidates(src_lane, base_bus_y, 10.0, 20)
+            # prefer top corridor first
+            top_base = safe_top + (same_lane_idx * 18.0)
 
-                y0 = top + LANE_HEADER_H + MIN_PAD_Y
-                lower_start = y0 + NODE_H + (ROW_GAP / 2.0)
-                cand_list += _same_lane_bus_y_candidates(src_lane, lower_start, 12.0, 16)
+            # if top corridor is occupied, use a lower corridor under first row
+            bottom_base = node_row_bot + 18.0 + (same_lane_idx * 18.0)
 
-                chosen = None
-                for cand in cand_list:
+            chosen_bus_y = None
+
+            def _same_lane_y_ok(cand_y: float) -> bool:
+                if node_row_top <= cand_y <= node_row_bot:
+                    return False
+                if not _bus_y_ok(cand_y, sx, tx):
+                    return False
+                if _seg_overlaps(_hseg(cand_y, sx, tx), occupied_bus_hsegs, tol=6.0):
+                    return False
+                return True
+
+            # try upper corridor
+            for cand in _same_lane_bus_y_candidates(src_lane, top_base, 12.0, 18):
+                cand = _clamp(cand, safe_top, safe_bot)
+                if _same_lane_y_ok(cand):
+                    chosen_bus_y = cand
+                    break
+
+            # try lower corridor
+            if chosen_bus_y is None:
+                for cand in _same_lane_bus_y_candidates(src_lane, bottom_base, 12.0, 18):
                     cand = _clamp(cand, safe_top, safe_bot)
-                    if _bus_y_ok(cand, sx, ex) and not _seg_overlaps(_hseg(cand, sx, ex), occupied_bus_hsegs, tol=6.0):
-                        chosen = cand
+                    if _same_lane_y_ok(cand):
+                        chosen_bus_y = cand
                         break
-                if chosen is not None:
-                    bus_y = chosen
 
-        occupied_bus_hsegs.append(_hseg(bus_y, sx, ex))
+            # final fallback scan
+            if chosen_bus_y is None:
+                for cand in range(int(safe_top), int(safe_bot) + 1, 12):
+                    cand_y = float(cand)
+                    if _same_lane_y_ok(cand_y):
+                        chosen_bus_y = cand_y
+                        break
 
-        route_pts.extend([(sx, bus_y), (ex, bus_y), end_pre, end])
-        route_pts = _dedupe_points(route_pts)
+            # absolute fallback
+            if chosen_bus_y is None:
+                chosen_bus_y = safe_top
 
-        route_pts = _add_exit_dogleg_if_needed(route_pts, src_side, DOGLEG_OUT)
-        route_pts = _add_entry_dogleg_if_needed(route_pts, tgt_side, DOGLEG_OUT)
+            bus_y = chosen_bus_y
+        else:
+            if lane_top_y[src_lane] < lane_top_y[tgt_lane]:
+                gap_top = lane_bottom_y[src_lane] + 6
+                gap_bot = lane_top_y[tgt_lane] - 6
+            else:
+                gap_top = lane_bottom_y[tgt_lane] + 6
+                gap_bot = lane_top_y[src_lane] - 6
+
+            if gap_bot <= gap_top:
+                bus_y = (sy + ty) / 2.0
+            else:
+                bus_y = _pick_non_overlapping_bus_y(
+                    base_y=(gap_top + gap_bot) / 2.0,
+                    sx=sx,
+                    ex=tx,
+                    safe_top=gap_top,
+                    safe_bot=gap_bot,
+                    node_rects_inflated=node_rects_inflated,
+                    occupied_bus_hsegs=occupied_bus_hsegs,
+                    step=12.0,
+                    tries=18,
+                    tol=6.0,
+                )
+
+        occupied_bus_hsegs.append(_hseg(bus_y, sx, tx))
+
+        # ------------------------------------------------------
+        # Separate vertical target corridors, but keep short
+        # direct vertical edges clean to avoid ugly hooks.
+        # ------------------------------------------------------
+        route_pts: List[Point]
+
+        if tgt_side in ("north", "south"):
+            nearly_same_x = abs(start[0] - end[0]) < 28.0
+            adjacent_lane_vertical = abs(start[1] - end[1]) < 260.0
+
+            if nearly_same_x and adjacent_lane_vertical:
+                route_pts = _dedupe_points([
+                    start,
+                    end,
+                ])
+            else:
+                side_key = "right" if end[0] >= (START_X + LANE_WIDTH / 2.0) else "left"
+                v_key = (tgt_plan, side_key)
+                v_idx = vertical_target_counter[v_key]
+                vertical_target_counter[v_key] += 1
+
+                shift = 20.0 * v_idx
+                vx = end[0] + shift if side_key == "right" else end[0] - shift
+                vx = _clamp(vx, SAFE_X_MIN, SAFE_X_MAX)
+
+                route_pts = _dedupe_points([
+                    start,
+                    (sx, bus_y),
+                    (vx, bus_y),
+                    (vx, end[1]),
+                    end,
+                ])
+        else:
+            route_pts = _dedupe_points([
+                start,
+                (sx, bus_y),
+                (tx, bus_y),
+                end,
+            ])
 
         edge_records.append(
             {
@@ -1361,19 +1407,20 @@ def build_drawio_from_plan(plan: dict) -> str:
             }
         )
 
-    # Separate overlapping routes (and avoid hitting nodes)
     separate_routes_with_validation(
         edge_records=edge_records,
         node_rects=node_rects_inflated,
         tolerance=6.0,
-        offset_step=12.0,
-        offset_tries=14,
+        offset_step=10.0,
+        offset_tries=12,
         keep_ends_fixed=True,
         clamp_x=(SAFE_X_MIN, SAFE_X_MAX),
         clamp_y=None,
     )
 
-    # Emit edge cells (behind nodes) + attach labels as edge-children
+    # ----------------------------------------------------------
+    # Emit edges first
+    # ----------------------------------------------------------
     for rec in edge_records:
         src_cell = rec["src_cell"]
         tgt_cell = rec["tgt_cell"]
@@ -1386,95 +1433,38 @@ def build_drawio_from_plan(plan: dict) -> str:
             points_xml = f'<Array as="points">{pts}</Array>'
 
         eid = next_id()
+        raw_edge_label = (rec["edge"].get("label") or "").strip()
+        raw_data_label = (rec["edge"].get("data_label") or "").strip()
+        visible_label = _esc(_short(_nounify_edge_label(raw_edge_label, raw_data_label), 48))
+
         cells.append(
-            f'<mxCell id="{eid}" value="" style="{rec["style"]}" '
+            f'<mxCell id="{eid}" value="{visible_label}" style="{rec["style"]}" '
             f'edge="1" parent="1" source="{src_cell}" target="{tgt_cell}">'
             f'<mxGeometry relative="1" as="geometry">{points_xml}</mxGeometry>'
             f"</mxCell>"
         )
 
-        # Data label (optional) — MUST stay on its own edge and stay close unless crowded
-        e = rec["edge"]
-        data_label_raw = (e.get("data_label") or "").strip()
-        data_label = _esc(_short(data_label_raw, 40))
-        if data_label:
-            dlid = next_id()
-
-            src_plan = rec.get("src_plan") or ""
-            idx = out_edge_index[src_plan]
-            out_edge_index[src_plan] += 1
-
-            # UPDATED: smaller push so labels don't drift far
-            extra_push = _offset_seq_px(min(idx, 10), 4.0)
-
-            lw, lh, offx, offy = _place_label_on_edge_return_offset(
-                text=data_label,
-                route_pts=route_pts,
-                global_i=edge_index_global,
-                extra_push=extra_push,
-            )
-            edge_index_global += 1
-
-            data_style = (
-                "text;html=1;align=center;verticalAlign=middle;"
-                "resizable=0;rotatable=0;movable=0;"
-                "fontSize=9;fontStyle=2;"
-                "whiteSpace=wrap;"
-                "labelBackgroundColor=#FFFFFF;"
-                "strokeColor=none;"
-                "spacing=2;"
-            )
-
-            # IMPORTANT: parent is the EDGE CELL (eid), geometry is relative with offset
-            pending_edge_child_labels.append(
-                f'<mxCell id="{dlid}" value="{data_label}" style="{data_style}" '
-                f'vertex="1" connectable="0" parent="{eid}">'
-                f'<mxGeometry relative="1" width="{lw:.1f}" height="{lh:.1f}" as="geometry">'
-                f'<mxPoint x="{offx:.1f}" y="{offy:.1f}" as="offset"/>'
-                f"</mxGeometry>"
-                f"</mxCell>"
-            )
-
-    # Nodes LAST
+    # ----------------------------------------------------------
+    # Emit nodes last
+    # ----------------------------------------------------------
     for info in node_layout:
-        mx_node_id = info["mx_id"]
-        label = info["label"]
-        x = info["x"]
-        y = info["y"]
-        w = info["w"]
-        fill = info["fill"]
-
-        node_style = (
-            "rounded=1;"
-            "whiteSpace=wrap;"
-            "html=1;"
-            "align=center;"
-            "verticalAlign=middle;"
-            "strokeWidth=2;"
-            "strokeColor=#2b2b2b;"
-            f"fillColor={fill};"
-            "fontStyle=1;"
-            "fontSize=11;"
-        )
-
+        node_style = _node_style(info["fill"], info["shape"])
         cells.append(
-            f'<mxCell id="{mx_node_id}" value="{label}" style="{node_style}" vertex="1" parent="1">'
-            f'<mxGeometry x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{NODE_H}" as="geometry"/>'
+            f'<mxCell id="{info["mx_id"]}" value="{info["label"]}" style="{node_style}" '
+            f'vertex="1" parent="{info["parent"]}">'
+            f'<mxGeometry x="{info["x"]:.1f}" y="{info["y"]:.1f}" width="{info["w"]:.1f}" height="{info["h"]:.1f}" as="geometry"/>'
             f"</mxCell>"
         )
 
-    # Edge-attached labels last
-    cells.extend(pending_edge_child_labels)
-
     cells_xml = "\n".join(cells)
 
-    page_h = lane_y + 80
-    page_w = START_X + LANE_WIDTH + 80
+    page_h = lane_y + 40
+    page_w = START_X + LANE_WIDTH + 40
 
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net" modified="{title}" agent="ProcessFlow Export" version="21.0.0" type="device">
  <diagram name="Process Flow" id="process-flow-diagram">
-   <mxGraphModel dx="{page_w}" dy="{page_h}" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="{page_w}" pageHeight="{page_h}" math="0" shadow="0">
+   <mxGraphModel dx="{int(page_w)}" dy="{int(page_h)}" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="{int(page_w)}" pageHeight="{int(page_h)}" math="0" shadow="0">
      <root>
        <mxCell id="0"/>
        <mxCell id="1" parent="0"/>

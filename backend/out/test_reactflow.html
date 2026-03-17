@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Pledging Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #ffffff;
+    width: 660px;
+    height: 492px;
+  }
+  svg { display: block; }
+</style>
+</head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="492" viewBox="0 0 660 492">
+  <defs>
+    <filter id="shadow" x="-4%" y="-4%" width="108%" height="116%">
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" fill="#555">
+      <polygon points="0 0, 10 3.5, 0 7"/>
+    </marker>
+  </defs>
+
+  <!-- Background dots pattern -->
+  <pattern id="dots" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+    <circle cx="2" cy="2" r="0.8" fill="#e0e0e0"/>
+  </pattern>
+  <rect width="100%" height="100%" fill="url(#dots)"/>
+
+  <!-- Title bar -->
+  <rect x="30" y="30" width="600" height="50" rx="10" ry="10" fill="#1a1a2e"/>
+  <text x="330" y="61.0" text-anchor="middle"
+        font-size="18" font-weight="700" fill="#ffffff"
+        font-family="-apple-system, BlinkMacSystemFont, sans-serif">Pledging Flow</text>
+
+  <!-- Lanes -->
+  <rect x="30" y="96" width="600" height="98" rx="4" ry="4" fill="#E3F2FD" stroke="#1c7fce" stroke-width="2"/><rect x="30" y="96" width="28" height="98" rx="4" ry="4" fill="#2196F3"/><rect x="54" y="96" width="4" height="98" fill="#2196F3"/><text x="44.0" y="145.0" text-anchor="middle" dominant-baseline="central" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif" transform="rotate(-90 44.0 145.0)">Donors</text><rect x="30" y="218" width="600" height="98" rx="4" ry="4" fill="#E8F5E9" stroke="#409444" stroke-width="2"/><rect x="30" y="218" width="28" height="98" rx="4" ry="4" fill="#4CAF50"/><rect x="54" y="218" width="4" height="98" fill="#4CAF50"/><text x="44.0" y="267.0" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif" transform="rotate(-90 44.0 267.0)">Charity Platforms</text><rect x="30" y="340" width="600" height="98" rx="4" ry="4" fill="#FFF3E0" stroke="#d88100" stroke-width="2"/><rect x="30" y="340" width="28" height="98" rx="4" ry="4" fill="#FF9800"/><rect x="54" y="340" width="4" height="98" fill="#FF9800"/><text x="44.0" y="389.0" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif" transform="rotate(-90 44.0 389.0)">Payment Providers</text>
+
+  <!-- Edges -->
+  <path d="M 464.0 170.0 L 464.0 242.0" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)" style="stroke-linejoin: round; stroke-linecap: round;"/><path d="M 379.0 267.0 L 309.0 267.0" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)" style="stroke-linejoin: round; stroke-linecap: round;"/><path d="M 224.0 292.0 L 224.0 328.0 L 344.0 328.0 L 344.0 364.0" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)" style="stroke-linejoin: round; stroke-linecap: round;"/><path d="M 358.0 364.0 L 358.0 267.0 L 224.0 267.0 L 224.0 170.0" fill="none" stroke="#555" stroke-width="2" marker-end="url(#arrowhead)" style="stroke-linejoin: round; stroke-linecap: round;"/>
+
+  <!-- Edge labels -->
+  <rect x="468.0" y="198.0" width="70" height="16" rx="3" ry="3" fill="#ffffff" fill-opacity="0.9" stroke="#ccc" stroke-width="0.8"/><text x="503.0" y="209.0" text-anchor="middle" font-size="8" font-weight="600" fill="#444" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Submission</text><rect x="318.0" y="248.0" width="52" height="16" rx="3" ry="3" fill="#ffffff" fill-opacity="0.9" stroke="#ccc" stroke-width="0.8"/><text x="344.0" y="259.0" text-anchor="middle" font-size="8" font-weight="600" fill="#444" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Pledges</text><rect x="261.0" y="309.0" width="46" height="16" rx="3" ry="3" fill="#ffffff" fill-opacity="0.9" stroke="#ccc" stroke-width="0.8"/><text x="284.0" y="320.0" text-anchor="middle" font-size="8" font-weight="600" fill="#444" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Export</text><rect x="250.0" y="208.0" width="82" height="16" rx="3" ry="3" fill="#ffffff" fill-opacity="0.9" stroke="#ccc" stroke-width="0.8"/><text x="291.0" y="219.0" text-anchor="middle" font-size="8" font-weight="600" fill="#444" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Instructions</text>
+
+  <!-- Nodes -->
+  <rect x="139.0" y="120" width="170" height="50" rx="10" ry="10" fill="#2196F3" stroke="#1975bd" stroke-width="2" filter="url(#shadow)"/><text x="224.0" y="149.0" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Donor</text><rect x="379.0" y="120" width="170" height="50" rx="10" ry="10" fill="#2196F3" stroke="#1975bd" stroke-width="2" filter="url(#shadow)"/><text x="464.0" y="149.0" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Event Attendee</text><rect x="139.0" y="242" width="170" height="50" rx="10" ry="10" fill="#4CAF50" stroke="#3b883e" stroke-width="2" filter="url(#shadow)"/><text x="224.0" y="271.0" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Beacon CRM</text><rect x="379.0" y="242" width="170" height="50" rx="10" ry="10" fill="#4CAF50" stroke="#3b883e" stroke-width="2" filter="url(#shadow)"/><text x="464.0" y="271.0" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Cognito Forms</text><rect x="259.0" y="364" width="170" height="50" rx="10" ry="10" fill="#FF9800" stroke="#c67600" stroke-width="2" filter="url(#shadow)"/><text x="344.0" y="393.0" text-anchor="middle" font-size="12" font-weight="700" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, sans-serif">Email Service</text>
+</svg>
+
+<script>
+  window.__REACTFLOW_RENDERED__ = true;
+</script>
+</body>
+</html>
